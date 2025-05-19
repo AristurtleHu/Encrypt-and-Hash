@@ -88,19 +88,6 @@ void merkel_tree(const uint8_t *input, uint8_t *output, size_t length) {
       _mm_prefetch((const char *)(prev_buf + k), _MM_HINT_T0);
     }
 
-    size_t limit_cur = length;
-    for (k = 0; k < limit_cur / unroll_step * unroll_step; k += unroll_step) {
-      _mm_prefetch((const char *)(cur_buf + k), _MM_HINT_T0);
-      _mm_prefetch((const char *)(cur_buf + k + prefetch_stride), _MM_HINT_T0);
-      _mm_prefetch((const char *)(cur_buf + k + 2 * prefetch_stride),
-                   _MM_HINT_T0);
-      _mm_prefetch((const char *)(cur_buf + k + 3 * prefetch_stride),
-                   _MM_HINT_T0);
-    }
-    for (; k < limit_cur; k += prefetch_stride) {
-      _mm_prefetch((const char *)(cur_buf + k), _MM_HINT_T0);
-    }
-
 #pragma omp parallel for
     for (size_t i = 0; i < length / 64; ++i) {
       merge_hash(prev_buf + (2 * i) * 64, prev_buf + (2 * i + 1) * 64,
