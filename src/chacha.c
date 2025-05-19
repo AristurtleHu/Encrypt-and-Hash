@@ -18,6 +18,20 @@ static void chacha_quarter_round(uint32_t x[16], size_t a, size_t b, size_t c,
   x[b] = ROTL32(x[b] ^ x[c], 7);
 }
 
+#define CHACHA_QR_SIMD(a, b, c, d)                                             \
+  (a) = _mm_add_epi32((a), (b));                                               \
+  (d) = _mm_xor_si128((d), (a));                                               \
+  (d) = rotl32_128((d), 16);                                                   \
+  (c) = _mm_add_epi32((c), (d));                                               \
+  (b) = _mm_xor_si128((b), (c));                                               \
+  (b) = rotl32_128((b), 12);                                                   \
+  (a) = _mm_add_epi32((a), (b));                                               \
+  (d) = _mm_xor_si128((d), (a));                                               \
+  (d) = rotl32_128((d), 8);                                                    \
+  (c) = _mm_add_epi32((c), (d));                                               \
+  (b) = _mm_xor_si128((b), (c));                                               \
+  (b) = rotl32_128((b), 7)
+
 static void chacha20_block(uint32_t state[16], uint8_t out[64]) {
 
   __m128i v_s0_3, v_s4_7, v_s8_11, v_s12_15;
@@ -27,25 +41,26 @@ static void chacha20_block(uint32_t state[16], uint8_t out[64]) {
   v_s8_11 = _mm_loadu_si128((const __m128i *)&state[8]);
   v_s12_15 = _mm_loadu_si128((const __m128i *)&state[12]);
 
-  uint32_t working_state[16];
-  memcpy(working_state, state, 64);
-  // TODO: use SIMD for this
+  v_x0_3 = v_s0_3;
+  v_x4_7 = v_s4_7;
+  v_x8_11 = v_s8_11;
+  v_x12_15 = v_s12_15;
+
   for (int i = 0; i < 10; i++) {
-    chacha_quarter_round(working_state, 0, 4, 8, 12);
-    chacha_quarter_round(working_state, 1, 5, 9, 13);
-    chacha_quarter_round(working_state, 2, 6, 10, 14);
-    chacha_quarter_round(working_state, 3, 7, 11, 15);
+    // Column rounds
+    CHACHA_QR_SIMD(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
 
-    chacha_quarter_round(working_state, 0, 5, 10, 15);
-    chacha_quarter_round(working_state, 1, 6, 11, 12);
-    chacha_quarter_round(working_state, 2, 7, 8, 13);
-    chacha_quarter_round(working_state, 3, 4, 9, 14);
+    // Diagonal rounds
+    v_x4_7 = _mm_shuffle_epi32(v_x4_7, _MM_SHUFFLE(0, 3, 2, 1));
+    v_x8_11 = _mm_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
+    v_x12_15 = _mm_shuffle_epi32(v_x12_15, _MM_SHUFFLE(2, 1, 0, 3));
+
+    CHACHA_QR_SIMD(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
+
+    v_x4_7 = _mm_shuffle_epi32(v_x4_7, _MM_SHUFFLE(2, 1, 0, 3));
+    v_x8_11 = _mm_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
+    v_x12_15 = _mm_shuffle_epi32(v_x12_15, _MM_SHUFFLE(0, 3, 2, 1));
   }
-
-  v_x0_3 = _mm_loadu_si128((const __m128i *)&working_state[0]);
-  v_x4_7 = _mm_loadu_si128((const __m128i *)&working_state[4]);
-  v_x8_11 = _mm_loadu_si128((const __m128i *)&working_state[8]);
-  v_x12_15 = _mm_loadu_si128((const __m128i *)&working_state[12]);
 
   // Add initial state
   v_x0_3 = _mm_add_epi32(v_x0_3, v_s0_3);
