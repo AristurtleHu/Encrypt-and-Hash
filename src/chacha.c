@@ -29,11 +29,9 @@ static void chacha20_block(uint32_t state[16], uint8_t out[64]) {
     chacha_quarter_round(working_state, 3, 4, 9, 14);
   }
 
+#pragma omp for
   for (int i = 0; i < 16; i++) {
     working_state[i] += state[i];
-  }
-
-  for (int i = 0; i < 16; i++) {
     out[i * 4 + 0] = (uint8_t)(working_state[i] >> 0);
     out[i * 4 + 1] = (uint8_t)(working_state[i] >> 8);
     out[i * 4 + 2] = (uint8_t)(working_state[i] >> 16);
@@ -47,12 +45,14 @@ void chacha20_encrypt(const uint8_t key[32], const uint8_t nonce[12],
   uint32_t key_words[8];
   uint32_t nonce_words[3];
 
+#pragma omp for
   for (int i = 0; i < 8; i++) {
     key_words[i] = (uint32_t)key[i * 4 + 0] | ((uint32_t)key[i * 4 + 1] << 8) |
                    ((uint32_t)key[i * 4 + 2] << 16) |
                    ((uint32_t)key[i * 4 + 3] << 24);
   }
 
+#pragma omp for
   for (int i = 0; i < 3; i++) {
     nonce_words[i] =
         (uint32_t)nonce[i * 4 + 0] | ((uint32_t)nonce[i * 4 + 1] << 8) |
@@ -72,6 +72,8 @@ void chacha20_encrypt(const uint8_t key[32], const uint8_t nonce[12],
 
     chacha20_block(state, key_stream);
     size_t block_size = length < 64 ? length : 64;
+
+#pragma omp for
     for (size_t i = 0; i < block_size; i++) {
       buffer[offset + i] = buffer[offset + i] ^ key_stream[i];
     }
