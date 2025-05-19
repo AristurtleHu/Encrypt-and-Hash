@@ -1,4 +1,10 @@
 #include "mercha.h"
+#include <immintrin.h>
+
+// Helper for ROTL32 on __m128i 4int
+static inline __m128i rotl32_128(__m128i x, int n) {
+  return _mm_or_si128(_mm_slli_epi32(x, n), _mm_srli_epi32(x, 32 - n));
+}
 
 static void chacha_quarter_round(uint32_t x[16], size_t a, size_t b, size_t c,
                                  size_t d) {
@@ -14,9 +20,16 @@ static void chacha_quarter_round(uint32_t x[16], size_t a, size_t b, size_t c,
 
 static void chacha20_block(uint32_t state[16], uint8_t out[64]) {
 
+  __m128i v_s0_3, v_s4_7, v_s8_11, v_s12_15;
+  __m128i v_x0_3, v_x4_7, v_x8_11, v_x12_15;
+  v_s0_3 = _mm_loadu_si128((const __m128i *)&state[0]);
+  v_s4_7 = _mm_loadu_si128((const __m128i *)&state[4]);
+  v_s8_11 = _mm_loadu_si128((const __m128i *)&state[8]);
+  v_s12_15 = _mm_loadu_si128((const __m128i *)&state[12]);
+
   uint32_t working_state[16];
   memcpy(working_state, state, 64);
-
+  // TODO: use SIMD for this
   for (int i = 0; i < 10; i++) {
     chacha_quarter_round(working_state, 0, 4, 8, 12);
     chacha_quarter_round(working_state, 1, 5, 9, 13);
@@ -29,35 +42,54 @@ static void chacha20_block(uint32_t state[16], uint8_t out[64]) {
     chacha_quarter_round(working_state, 3, 4, 9, 14);
   }
 
-#pragma omp for
-  for (int i = 0; i < 16; i++) {
-    working_state[i] += state[i];
-    out[i * 4 + 0] = (uint8_t)(working_state[i] >> 0);
-    out[i * 4 + 1] = (uint8_t)(working_state[i] >> 8);
-    out[i * 4 + 2] = (uint8_t)(working_state[i] >> 16);
-    out[i * 4 + 3] = (uint8_t)(working_state[i] >> 24);
-  }
+  v_x0_3 = _mm_loadu_si128((const __m128i *)&working_state[0]);
+  v_x4_7 = _mm_loadu_si128((const __m128i *)&working_state[4]);
+  v_x8_11 = _mm_loadu_si128((const __m128i *)&working_state[8]);
+  v_x12_15 = _mm_loadu_si128((const __m128i *)&working_state[12]);
+
+  // Add initial state
+  v_x0_3 = _mm_add_epi32(v_x0_3, v_s0_3);
+  v_x4_7 = _mm_add_epi32(v_x4_7, v_s4_7);
+  v_x8_11 = _mm_add_epi32(v_x8_11, v_s8_11);
+  v_x12_15 = _mm_add_epi32(v_x12_15, v_s12_15);
+
+  // Store results
+  _mm_storeu_si128((__m128i *)(out + 0), v_x0_3);
+  _mm_storeu_si128((__m128i *)(out + 16), v_x4_7);
+  _mm_storeu_si128((__m128i *)(out + 32), v_x8_11);
+  _mm_storeu_si128((__m128i *)(out + 48), v_x12_15);
 }
 
 void chacha20_encrypt(const uint8_t key[32], const uint8_t nonce[12],
                       uint32_t initial_counter, uint8_t *buffer,
                       size_t length) {
+
   uint32_t key_words[8];
   uint32_t nonce_words[3];
 
-#pragma omp for
-  for (int i = 0; i < 8; i++) {
-    key_words[i] = (uint32_t)key[i * 4 + 0] | ((uint32_t)key[i * 4 + 1] << 8) |
-                   ((uint32_t)key[i * 4 + 2] << 16) |
-                   ((uint32_t)key[i * 4 + 3] << 24);
-  }
+  key_words[0] = (uint32_t)key[0] | ((uint32_t)key[1] << 8) |
+                 ((uint32_t)key[2] << 16) | ((uint32_t)key[3] << 24);
+  key_words[1] = (uint32_t)key[4] | ((uint32_t)key[5] << 8) |
+                 ((uint32_t)key[6] << 16) | ((uint32_t)key[7] << 24);
+  key_words[2] = (uint32_t)key[8] | ((uint32_t)key[9] << 8) |
+                 ((uint32_t)key[10] << 16) | ((uint32_t)key[11] << 24);
+  key_words[3] = (uint32_t)key[12] | ((uint32_t)key[13] << 8) |
+                 ((uint32_t)key[14] << 16) | ((uint32_t)key[15] << 24);
+  key_words[4] = (uint32_t)key[16] | ((uint32_t)key[17] << 8) |
+                 ((uint32_t)key[18] << 16) | ((uint32_t)key[19] << 24);
+  key_words[5] = (uint32_t)key[20] | ((uint32_t)key[21] << 8) |
+                 ((uint32_t)key[22] << 16) | ((uint32_t)key[23] << 24);
+  key_words[6] = (uint32_t)key[24] | ((uint32_t)key[25] << 8) |
+                 ((uint32_t)key[26] << 16) | ((uint32_t)key[27] << 24);
+  key_words[7] = (uint32_t)key[28] | ((uint32_t)key[29] << 8) |
+                 ((uint32_t)key[30] << 16) | ((uint32_t)key[31] << 24);
 
-#pragma omp for
-  for (int i = 0; i < 3; i++) {
-    nonce_words[i] =
-        (uint32_t)nonce[i * 4 + 0] | ((uint32_t)nonce[i * 4 + 1] << 8) |
-        ((uint32_t)nonce[i * 4 + 2] << 16) | ((uint32_t)nonce[i * 4 + 3] << 24);
-  }
+  nonce_words[0] = (uint32_t)nonce[0] | ((uint32_t)nonce[1] << 8) |
+                   ((uint32_t)nonce[2] << 16) | ((uint32_t)nonce[3] << 24);
+  nonce_words[1] = (uint32_t)nonce[4] | ((uint32_t)nonce[5] << 8) |
+                   ((uint32_t)nonce[6] << 16) | ((uint32_t)nonce[7] << 24);
+  nonce_words[2] = (uint32_t)nonce[8] | ((uint32_t)nonce[9] << 8) |
+                   ((uint32_t)nonce[10] << 16) | ((uint32_t)nonce[11] << 24);
 
   uint32_t state[16] = {
       0x61707865,      0x3320646e,     0x79622d32,     0x6b206574,
@@ -65,21 +97,23 @@ void chacha20_encrypt(const uint8_t key[32], const uint8_t nonce[12],
       key_words[4],    key_words[5],   key_words[6],   key_words[7],
       initial_counter, nonce_words[0], nonce_words[1], nonce_words[2]};
 
-  uint8_t key_stream[64];
-  size_t offset = 0;
+  size_t num_blocks = (length + 63) / 64;
 
-  while (length > 0) {
+#pragma omp parallel for
+  for (size_t block_idx = 0; block_idx < num_blocks; ++block_idx) {
+    uint32_t local_state[16];
+    memcpy(local_state, state, sizeof(state));
+    local_state[12] = initial_counter + (uint32_t)block_idx;
 
-    chacha20_block(state, key_stream);
-    size_t block_size = length < 64 ? length : 64;
+    uint8_t key_stream[64];
+    chacha20_block(local_state, key_stream);
 
-#pragma omp for
-    for (size_t i = 0; i < block_size; i++) {
-      buffer[offset + i] = buffer[offset + i] ^ key_stream[i];
+    size_t current_block_offset = block_idx * 64;
+    size_t remaining_length = length - current_block_offset;
+    size_t bytes_in_block = (remaining_length < 64) ? remaining_length : 64;
+
+    for (size_t i = 0; i < bytes_in_block; ++i) {
+      buffer[current_block_offset + i] ^= key_stream[i];
     }
-
-    offset += block_size;
-    length -= block_size;
-    state[12]++;
   }
 }
