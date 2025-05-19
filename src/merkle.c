@@ -91,23 +91,25 @@ void merkel_tree(const uint8_t *input, uint8_t *output, size_t length) {
 
   length /= 2;
   while (length >= 64) {
-    size_t k;
-    const size_t prefetch_stride = 64;
-    const size_t unroll_factor = 4; // Unroll 4 prefetches per loop iteration
-    const size_t unroll_step = unroll_factor * prefetch_stride;
+    // size_t k;
+    // const size_t prefetch_stride = 64;
+    // const size_t unroll_factor = 4; // Unroll 4 prefetches per loop iteration
+    // const size_t unroll_step = unroll_factor * prefetch_stride;
 
-    size_t limit_prev = 2 * length;
-    for (k = 0; k < limit_prev / unroll_step * unroll_step; k += unroll_step) {
-      _mm_prefetch((const char *)(prev_buf + k), _MM_HINT_T0);
-      _mm_prefetch((const char *)(prev_buf + k + prefetch_stride), _MM_HINT_T0);
-      _mm_prefetch((const char *)(prev_buf + k + 2 * prefetch_stride),
-                   _MM_HINT_T0);
-      _mm_prefetch((const char *)(prev_buf + k + 3 * prefetch_stride),
-                   _MM_HINT_T0);
-    }
-    for (; k < limit_prev; k += prefetch_stride) {
-      _mm_prefetch((const char *)(prev_buf + k), _MM_HINT_T0);
-    }
+    // size_t limit_prev = 2 * length;
+    // for (k = 0; k < limit_prev / unroll_step * unroll_step; k += unroll_step)
+    // {
+    //   _mm_prefetch((const char *)(prev_buf + k), _MM_HINT_T0);
+    //   _mm_prefetch((const char *)(prev_buf + k + prefetch_stride),
+    //   _MM_HINT_T0); _mm_prefetch((const char *)(prev_buf + k + 2 *
+    //   prefetch_stride),
+    //                _MM_HINT_T0);
+    //   _mm_prefetch((const char *)(prev_buf + k + 3 * prefetch_stride),
+    //                _MM_HINT_T0);
+    // }
+    // for (; k < limit_prev; k += prefetch_stride) {
+    //   _mm_prefetch((const char *)(prev_buf + k), _MM_HINT_T0);
+    // }
 
 #pragma omp parallel for
     for (size_t i = 0; i < length / 64; ++i) {
