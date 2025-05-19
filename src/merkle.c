@@ -15,11 +15,11 @@ void merge_hash(const uint8_t block1[64], const uint8_t block2[64],
   // Control vector for reversing elements in a __m256i vector
   const __m256i v_reverse_control = _mm256_set_epi32(0, 1, 2, 3, 4, 5, 6, 7);
 
-  // state[i]    = w1[i] ^ w2[7 - i];
+  // state[i] = w1[i] ^ w2[7 - i];
   __m256i v_w2_rev = _mm256_permutevar8x32_epi32(v_w2, v_reverse_control);
   v_state0_7 = _mm256_xor_si256(v_w1, v_w2_rev);
 
-  // state[8 + i]= w2[i] ^ w1[7 - i];
+  // state[8 + i] = w2[i] ^ w1[7 - i];
   __m256i v_w1_rev = _mm256_permutevar8x32_epi32(v_w1, v_reverse_control);
   v_state8_15 = _mm256_xor_si256(v_w2, v_w1_rev);
 
