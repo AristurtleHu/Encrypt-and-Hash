@@ -1,43 +1,68 @@
 #include "mercha.h"
+#include <immintrin.h>
+
+// Helper for ROTL32 on __m128i 4int
+static inline __m128i rotl32_128(__m128i x, int n) {
+  return _mm_or_si128(_mm_slli_epi32(x, n), _mm_srli_epi32(x, 32 - n));
+}
 
 void merge_hash(const uint8_t block1[64], const uint8_t block2[64],
                 uint8_t output[64]) {
 
-  uint32_t state[16];
+  __m256i v_state0_7, v_state8_15;
 
-  const uint32_t *w1 = (const uint32_t *)block1;
-  const uint32_t *w2 = (const uint32_t *)block2;
+  __m256i v_w1 = _mm256_loadu_si256((const __m256i *)block1);
+  __m256i v_w2 = _mm256_loadu_si256((const __m256i *)block2);
 
-#pragma omp for
-  for (int i = 0; i < 8; ++i) {
-    state[i] = w1[i] ^ w2[7 - i];
-    state[8 + i] = w2[i] ^ w1[7 - i];
-  }
+  // Control vector for reversing elements in a __m256i vector
+  const __m256i v_reverse_control = _mm256_set_epi32(0, 1, 2, 3, 4, 5, 6, 7);
 
+  // state[i]    = w1[i] ^ w2[7 - i];
+  __m256i v_w2_rev = _mm256_permutevar8x32_epi32(v_w2, v_reverse_control);
+  v_state0_7 = _mm256_xor_si256(v_w1, v_w2_rev);
+
+  // state[8 + i]= w2[i] ^ w1[7 - i];
+  __m256i v_w1_rev = _mm256_permutevar8x32_epi32(v_w1, v_reverse_control);
+  v_state8_15 = _mm256_xor_si256(v_w2, v_w1_rev);
+
+  // Rounds
   for (int round = 0; round < 10; ++round) {
-#pragma omp for
-    for (int i = 0; i < 4; ++i) {
-      state[i] += state[4 + i];
-      state[i] = ROTL32(state[i], 7);
-      state[8 + i] += state[12 + i];
-      state[8 + i] = ROTL32(state[8 + i], 7);
-    }
 
-#pragma omp for
-    for (int i = 0; i < 4; ++i) {
-      state[i] += state[8 + i];
-      state[i] = ROTL32(state[i], 9);
-      state[4 + i] += state[12 + i];
-      state[4 + i] = ROTL32(state[4 + i], 9);
-    }
+    __m128i v_state0_3 = _mm256_castsi256_si128(v_state0_7);      // state[0-3]
+    __m128i v_state4_7 = _mm256_extracti128_si256(v_state0_7, 1); // state[4-7]
+    __m128i v_state8_11 = _mm256_castsi256_si128(v_state8_15);    // state[8-11]
+    __m128i v_state12_15 =
+        _mm256_extracti128_si256(v_state8_15, 1); // state[12-15]
+
+    // state[i] += state[4 + i];
+    v_state0_3 = _mm_add_epi32(v_state0_3, v_state4_7);
+    v_state0_3 = rotl32_128(v_state0_3, 7);
+
+    // state[8 + i] += state[12 + i];
+    v_state8_11 = _mm_add_epi32(v_state8_11, v_state12_15);
+    v_state8_11 = rotl32_128(v_state8_11, 7);
+
+    // state[i] += state[8 + i];
+    v_state0_3 = _mm_add_epi32(v_state0_3, v_state8_11);
+    v_state0_3 = rotl32_128(v_state0_3, 9);
+
+    // state[4 + i] += state[12 + i];
+    v_state4_7 = _mm_add_epi32(v_state4_7, v_state12_15);
+    v_state4_7 = rotl32_128(v_state4_7, 9);
+
+    // Update state vectors
+    v_state0_7 = _mm256_set_m128i(v_state4_7, v_state0_3);
+    v_state8_15 = _mm256_set_m128i(v_state12_15, v_state8_11);
   }
 
-#pragma omp for
-  for (int i = 0; i < 8; ++i) {
-    state[i] += state[15 - i];
-  }
+  // Final summation: state[i] += state[15 - i];
+  __m256i v_state8_15_rev =
+      _mm256_permutevar8x32_epi32(v_state8_15, v_reverse_control);
+  v_state0_7 = _mm256_add_epi32(v_state0_7, v_state8_15_rev);
 
-  memcpy(output, state, 64);
+  // Store result
+  _mm256_storeu_si256((__m256i *)output, v_state0_7);
+  _mm256_storeu_si256((__m256i *)(output + 32), v_state8_15);
 }
 
 void merkel_tree(const uint8_t *input, uint8_t *output, size_t length) {
@@ -46,18 +71,16 @@ void merkel_tree(const uint8_t *input, uint8_t *output, size_t length) {
   uint8_t *prev_buf = malloc(length);
   memcpy(prev_buf, input, length);
 
-  size_t current_length = length / 2;
+  length /= 2;
+  while (length >= 64) {
 
-  while (current_length >= 64) {
-    size_t num = current_length / 64;
-
-#pragma omp for
-    for (size_t i = 0; i < num; ++i) {
+#pragma omp parallel for
+    for (size_t i = 0; i < length / 64; ++i) {
       merge_hash(prev_buf + (2 * i) * 64, prev_buf + (2 * i + 1) * 64,
                  cur_buf + i * 64);
     }
 
-    current_length /= 2;
+    length /= 2;
     uint8_t *tmp = cur_buf;
     cur_buf = prev_buf;
     prev_buf = tmp;
