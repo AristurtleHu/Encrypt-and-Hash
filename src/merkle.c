@@ -5,6 +5,27 @@
 #define rotl32_128(x, n)                                                       \
   _mm_or_si128(_mm_slli_epi32((x), (n)), _mm_srli_epi32((x), 32 - (n)))
 
+#define round                                                                  \
+  v_state0_3 = _mm256_castsi256_si128(v_state0_7);                             \
+  v_state4_7 = _mm256_extracti128_si256(v_state0_7, 1);                        \
+  v_state8_11 = _mm256_castsi256_si128(v_state8_15);                           \
+  v_state12_15 = _mm256_extracti128_si256(v_state8_15, 1);                     \
+                                                                               \
+  v_state0_3 = _mm_add_epi32(v_state0_3, v_state4_7);                          \
+  v_state0_3 = rotl32_128(v_state0_3, 7);                                      \
+                                                                               \
+  v_state8_11 = _mm_add_epi32(v_state8_11, v_state12_15);                      \
+  v_state8_11 = rotl32_128(v_state8_11, 7);                                    \
+                                                                               \
+  v_state0_3 = _mm_add_epi32(v_state0_3, v_state8_11);                         \
+  v_state0_3 = rotl32_128(v_state0_3, 9);                                      \
+                                                                               \
+  v_state4_7 = _mm_add_epi32(v_state4_7, v_state12_15);                        \
+  v_state4_7 = rotl32_128(v_state4_7, 9);                                      \
+                                                                               \
+  v_state0_7 = _mm256_set_m128i(v_state4_7, v_state0_3);                       \
+  v_state8_15 = _mm256_set_m128i(v_state12_15, v_state8_11);
+
 void merge_hash(const uint8_t block1[64], const uint8_t block2[64],
                 uint8_t output[64]) {
   __m256i v_state0_7, v_state8_15;
@@ -24,34 +45,34 @@ void merge_hash(const uint8_t block1[64], const uint8_t block2[64],
   v_state8_15 = _mm256_xor_si256(v_w2, v_w1_rev);
 
   // Rounds
-  for (int round = 0; round < 10; ++round) {
+  __m128i v_state0_3 = _mm256_castsi256_si128(v_state0_7);
+  __m128i v_state4_7 = _mm256_extracti128_si256(v_state0_7, 1);
+  __m128i v_state8_11 = _mm256_castsi256_si128(v_state8_15);
+  __m128i v_state12_15 = _mm256_extracti128_si256(v_state8_15, 1);
 
-    __m128i v_state0_3 = _mm256_castsi256_si128(v_state0_7);      // state[0-3]
-    __m128i v_state4_7 = _mm256_extracti128_si256(v_state0_7, 1); // state[4-7]
-    __m128i v_state8_11 = _mm256_castsi256_si128(v_state8_15);    // state[8-11]
-    __m128i v_state12_15 =
-        _mm256_extracti128_si256(v_state8_15, 1); // state[12-15]
+  v_state0_3 = _mm_add_epi32(v_state0_3, v_state4_7);
+  v_state0_3 = rotl32_128(v_state0_3, 7);
 
-    // state[i] += state[4 + i];
-    v_state0_3 = _mm_add_epi32(v_state0_3, v_state4_7);
-    v_state0_3 = rotl32_128(v_state0_3, 7);
+  v_state8_11 = _mm_add_epi32(v_state8_11, v_state12_15);
+  v_state8_11 = rotl32_128(v_state8_11, 7);
 
-    // state[8 + i] += state[12 + i];
-    v_state8_11 = _mm_add_epi32(v_state8_11, v_state12_15);
-    v_state8_11 = rotl32_128(v_state8_11, 7);
+  v_state0_3 = _mm_add_epi32(v_state0_3, v_state8_11);
+  v_state0_3 = rotl32_128(v_state0_3, 9);
 
-    // state[i] += state[8 + i];
-    v_state0_3 = _mm_add_epi32(v_state0_3, v_state8_11);
-    v_state0_3 = rotl32_128(v_state0_3, 9);
+  v_state4_7 = _mm_add_epi32(v_state4_7, v_state12_15);
+  v_state4_7 = rotl32_128(v_state4_7, 9);
 
-    // state[4 + i] += state[12 + i];
-    v_state4_7 = _mm_add_epi32(v_state4_7, v_state12_15);
-    v_state4_7 = rotl32_128(v_state4_7, 9);
-
-    // Update state vectors
-    v_state0_7 = _mm256_set_m128i(v_state4_7, v_state0_3);
-    v_state8_15 = _mm256_set_m128i(v_state12_15, v_state8_11);
-  }
+  v_state0_7 = _mm256_set_m128i(v_state4_7, v_state0_3);
+  v_state8_15 = _mm256_set_m128i(v_state12_15, v_state8_11);
+  round;
+  round;
+  round;
+  round;
+  round;
+  round;
+  round;
+  round;
+  round;
 
   // Final summation: state[i] += state[15 - i];
   __m256i v_state8_15_rev =

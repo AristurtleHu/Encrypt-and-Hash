@@ -37,22 +37,106 @@ static void chacha20_block(uint32_t state[16], uint8_t out[64]) {
   v_x12_15 = v_s12_15;
 
   // Rounds
-  for (int i = 0; i < 10; i++) {
-    // Column rounds
-    chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
 
-    // Diagonal rounds
-    v_x4_7 = _mm_shuffle_epi32(v_x4_7, _MM_SHUFFLE(0, 3, 2, 1));
-    v_x8_11 = _mm_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
-    v_x12_15 = _mm_shuffle_epi32(v_x12_15, _MM_SHUFFLE(2, 1, 0, 3));
+  // Round 1
+  chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
+  v_x4_7 = _mm_shuffle_epi32(v_x4_7, _MM_SHUFFLE(0, 3, 2, 1));
+  v_x8_11 = _mm_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
+  v_x12_15 = _mm_shuffle_epi32(v_x12_15, _MM_SHUFFLE(2, 1, 0, 3));
+  chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
+  v_x4_7 = _mm_shuffle_epi32(v_x4_7, _MM_SHUFFLE(2, 1, 0, 3));
+  v_x8_11 = _mm_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
+  v_x12_15 = _mm_shuffle_epi32(v_x12_15, _MM_SHUFFLE(0, 3, 2, 1));
 
-    chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
+  // Round 2
+  chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
+  v_x4_7 = _mm_shuffle_epi32(v_x4_7, _MM_SHUFFLE(0, 3, 2, 1));
+  v_x8_11 = _mm_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
+  v_x12_15 = _mm_shuffle_epi32(v_x12_15, _MM_SHUFFLE(2, 1, 0, 3));
+  chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
+  v_x4_7 = _mm_shuffle_epi32(v_x4_7, _MM_SHUFFLE(2, 1, 0, 3));
+  v_x8_11 = _mm_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
+  v_x12_15 = _mm_shuffle_epi32(v_x12_15, _MM_SHUFFLE(0, 3, 2, 1));
 
-    // Unshuffle
-    v_x4_7 = _mm_shuffle_epi32(v_x4_7, _MM_SHUFFLE(2, 1, 0, 3));
-    v_x8_11 = _mm_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
-    v_x12_15 = _mm_shuffle_epi32(v_x12_15, _MM_SHUFFLE(0, 3, 2, 1));
-  }
+  // Round 3
+  chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
+  v_x4_7 = _mm_shuffle_epi32(v_x4_7, _MM_SHUFFLE(0, 3, 2, 1));
+  v_x8_11 = _mm_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
+  v_x12_15 = _mm_shuffle_epi32(v_x12_15, _MM_SHUFFLE(2, 1, 0, 3));
+  chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
+  v_x4_7 = _mm_shuffle_epi32(v_x4_7, _MM_SHUFFLE(2, 1, 0, 3));
+  v_x8_11 = _mm_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
+  v_x12_15 = _mm_shuffle_epi32(v_x12_15, _MM_SHUFFLE(0, 3, 2, 1));
+
+  // Round 4
+  chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
+  v_x4_7 = _mm_shuffle_epi32(v_x4_7, _MM_SHUFFLE(0, 3, 2, 1));
+  v_x8_11 = _mm_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
+  v_x12_15 = _mm_shuffle_epi32(v_x12_15, _MM_SHUFFLE(2, 1, 0, 3));
+  chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
+  v_x4_7 = _mm_shuffle_epi32(v_x4_7, _MM_SHUFFLE(2, 1, 0, 3));
+  v_x8_11 = _mm_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
+  v_x12_15 = _mm_shuffle_epi32(v_x12_15, _MM_SHUFFLE(0, 3, 2, 1));
+
+  // Round 5
+  chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
+  v_x4_7 = _mm_shuffle_epi32(v_x4_7, _MM_SHUFFLE(0, 3, 2, 1));
+  v_x8_11 = _mm_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
+  v_x12_15 = _mm_shuffle_epi32(v_x12_15, _MM_SHUFFLE(2, 1, 0, 3));
+  chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
+  v_x4_7 = _mm_shuffle_epi32(v_x4_7, _MM_SHUFFLE(2, 1, 0, 3));
+  v_x8_11 = _mm_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
+  v_x12_15 = _mm_shuffle_epi32(v_x12_15, _MM_SHUFFLE(0, 3, 2, 1));
+
+  // Round 6
+  chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
+  v_x4_7 = _mm_shuffle_epi32(v_x4_7, _MM_SHUFFLE(0, 3, 2, 1));
+  v_x8_11 = _mm_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
+  v_x12_15 = _mm_shuffle_epi32(v_x12_15, _MM_SHUFFLE(2, 1, 0, 3));
+  chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
+  v_x4_7 = _mm_shuffle_epi32(v_x4_7, _MM_SHUFFLE(2, 1, 0, 3));
+  v_x8_11 = _mm_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
+  v_x12_15 = _mm_shuffle_epi32(v_x12_15, _MM_SHUFFLE(0, 3, 2, 1));
+
+  // Round 7
+  chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
+  v_x4_7 = _mm_shuffle_epi32(v_x4_7, _MM_SHUFFLE(0, 3, 2, 1));
+  v_x8_11 = _mm_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
+  v_x12_15 = _mm_shuffle_epi32(v_x12_15, _MM_SHUFFLE(2, 1, 0, 3));
+  chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
+  v_x4_7 = _mm_shuffle_epi32(v_x4_7, _MM_SHUFFLE(2, 1, 0, 3));
+  v_x8_11 = _mm_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
+  v_x12_15 = _mm_shuffle_epi32(v_x12_15, _MM_SHUFFLE(0, 3, 2, 1));
+
+  // Round 8
+  chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
+  v_x4_7 = _mm_shuffle_epi32(v_x4_7, _MM_SHUFFLE(0, 3, 2, 1));
+  v_x8_11 = _mm_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
+  v_x12_15 = _mm_shuffle_epi32(v_x12_15, _MM_SHUFFLE(2, 1, 0, 3));
+  chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
+  v_x4_7 = _mm_shuffle_epi32(v_x4_7, _MM_SHUFFLE(2, 1, 0, 3));
+  v_x8_11 = _mm_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
+  v_x12_15 = _mm_shuffle_epi32(v_x12_15, _MM_SHUFFLE(0, 3, 2, 1));
+
+  // Round 9
+  chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
+  v_x4_7 = _mm_shuffle_epi32(v_x4_7, _MM_SHUFFLE(0, 3, 2, 1));
+  v_x8_11 = _mm_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
+  v_x12_15 = _mm_shuffle_epi32(v_x12_15, _MM_SHUFFLE(2, 1, 0, 3));
+  chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
+  v_x4_7 = _mm_shuffle_epi32(v_x4_7, _MM_SHUFFLE(2, 1, 0, 3));
+  v_x8_11 = _mm_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
+  v_x12_15 = _mm_shuffle_epi32(v_x12_15, _MM_SHUFFLE(0, 3, 2, 1));
+
+  // Round 10
+  chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
+  v_x4_7 = _mm_shuffle_epi32(v_x4_7, _MM_SHUFFLE(0, 3, 2, 1));
+  v_x8_11 = _mm_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
+  v_x12_15 = _mm_shuffle_epi32(v_x12_15, _MM_SHUFFLE(2, 1, 0, 3));
+  chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
+  v_x4_7 = _mm_shuffle_epi32(v_x4_7, _MM_SHUFFLE(2, 1, 0, 3));
+  v_x8_11 = _mm_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
+  v_x12_15 = _mm_shuffle_epi32(v_x12_15, _MM_SHUFFLE(0, 3, 2, 1));
 
   // Add initial state
   v_x0_3 = _mm_add_epi32(v_x0_3, v_s0_3);
