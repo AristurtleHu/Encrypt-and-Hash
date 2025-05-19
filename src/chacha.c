@@ -2,9 +2,8 @@
 #include <immintrin.h>
 
 // Helper for ROTL32 on __m128i 4int
-static inline __m128i rotl32_128(__m128i x, int n) {
-  return _mm_or_si128(_mm_slli_epi32(x, n), _mm_srli_epi32(x, 32 - n));
-}
+#define rotl32_128(x, n)                                                       \
+  _mm_or_si128(_mm_slli_epi32((x), (n)), _mm_srli_epi32((x), 32 - (n)))
 
 #define chacha_simd(a, b, c, d)                                                \
   (a) = _mm_add_epi32((a), (b));                                               \
