@@ -158,29 +158,8 @@ void chacha20_encrypt(const uint8_t key[32], const uint8_t nonce[12],
   uint32_t key_words[8];
   uint32_t nonce_words[3];
 
-  key_words[0] = (uint32_t)key[0] | ((uint32_t)key[1] << 8) |
-                 ((uint32_t)key[2] << 16) | ((uint32_t)key[3] << 24);
-  key_words[1] = (uint32_t)key[4] | ((uint32_t)key[5] << 8) |
-                 ((uint32_t)key[6] << 16) | ((uint32_t)key[7] << 24);
-  key_words[2] = (uint32_t)key[8] | ((uint32_t)key[9] << 8) |
-                 ((uint32_t)key[10] << 16) | ((uint32_t)key[11] << 24);
-  key_words[3] = (uint32_t)key[12] | ((uint32_t)key[13] << 8) |
-                 ((uint32_t)key[14] << 16) | ((uint32_t)key[15] << 24);
-  key_words[4] = (uint32_t)key[16] | ((uint32_t)key[17] << 8) |
-                 ((uint32_t)key[18] << 16) | ((uint32_t)key[19] << 24);
-  key_words[5] = (uint32_t)key[20] | ((uint32_t)key[21] << 8) |
-                 ((uint32_t)key[22] << 16) | ((uint32_t)key[23] << 24);
-  key_words[6] = (uint32_t)key[24] | ((uint32_t)key[25] << 8) |
-                 ((uint32_t)key[26] << 16) | ((uint32_t)key[27] << 24);
-  key_words[7] = (uint32_t)key[28] | ((uint32_t)key[29] << 8) |
-                 ((uint32_t)key[30] << 16) | ((uint32_t)key[31] << 24);
-
-  nonce_words[0] = (uint32_t)nonce[0] | ((uint32_t)nonce[1] << 8) |
-                   ((uint32_t)nonce[2] << 16) | ((uint32_t)nonce[3] << 24);
-  nonce_words[1] = (uint32_t)nonce[4] | ((uint32_t)nonce[5] << 8) |
-                   ((uint32_t)nonce[6] << 16) | ((uint32_t)nonce[7] << 24);
-  nonce_words[2] = (uint32_t)nonce[8] | ((uint32_t)nonce[9] << 8) |
-                   ((uint32_t)nonce[10] << 16) | ((uint32_t)nonce[11] << 24);
+  memcpy(key_words, key, 32);
+  memcpy(nonce_words, nonce, 12);
 
   uint32_t state[16] = {
       0x61707865,      0x3320646e,     0x79622d32,     0x6b206574,
@@ -203,8 +182,16 @@ void chacha20_encrypt(const uint8_t key[32], const uint8_t nonce[12],
     size_t remaining_length = length - current_block_offset;
     size_t bytes_in_block = (remaining_length < 64) ? remaining_length : 64;
 
-    for (size_t i = 0; i < bytes_in_block; ++i) {
-      buffer[current_block_offset + i] ^= key_stream[i];
+    uint8_t *buf_ptr = buffer + current_block_offset;
+    size_t i = 0;
+    for (; i + 15 < bytes_in_block; i += 16) {
+      __m128i b_chunk = _mm_loadu_si128((const __m128i *)(buf_ptr + i));
+      __m128i k_chunk = _mm_loadu_si128((const __m128i *)(key_stream + i));
+      b_chunk = _mm_xor_si128(b_chunk, k_chunk);
+      _mm_storeu_si128((__m128i *)(buf_ptr + i), b_chunk);
+    }
+    for (; i < bytes_in_block; ++i) {
+      buf_ptr[i] ^= key_stream[i];
     }
   }
 }

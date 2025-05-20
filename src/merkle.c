@@ -85,8 +85,9 @@ void merge_hash(const uint8_t block1[64], const uint8_t block2[64],
 }
 
 void merkel_tree(const uint8_t *input, uint8_t *output, size_t length) {
-  uint8_t *cur_buf = malloc(length);
-  uint8_t *prev_buf = malloc(length);
+  uint8_t *cur_buf = (uint8_t *)_mm_malloc(length, 32);
+  uint8_t *prev_buf = (uint8_t *)_mm_malloc(length, 32);
+
   memcpy(prev_buf, input, length);
 
   length /= 2;
@@ -122,6 +123,6 @@ void merkel_tree(const uint8_t *input, uint8_t *output, size_t length) {
   }
 
   memcpy(output, prev_buf, 64);
-  free(cur_buf);
-  free(prev_buf);
+  _mm_free(cur_buf);
+  _mm_free(prev_buf);
 }
