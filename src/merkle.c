@@ -110,10 +110,24 @@ void merkel_tree(const uint8_t *input, uint8_t *output, size_t length) {
       _mm_prefetch((const char *)(prev_buf + k), _MM_HINT_T0);
     }
 
+    size_t num_output_blocks =
+        length / 64; // Total number of merge_hash operations for this level
+
 #pragma omp parallel for
-    for (size_t i = 0; i < length / 64; ++i) {
-      merge_hash(prev_buf + (2 * i) * 64, prev_buf + (2 * i + 1) * 64,
-                 cur_buf + i * 64);
+    for (size_t i = 0; i < num_output_blocks / 2; ++i) {
+      merge_hash(prev_buf + (4 * i) * 64, prev_buf + (4 * i + 1) * 64,
+                 cur_buf + (2 * i) * 64);
+
+      merge_hash(prev_buf + (4 * i + 2) * 64, prev_buf + (4 * i + 3) * 64,
+                 cur_buf + (2 * i + 1) * 64);
+    }
+
+    // If the total number of merge operations is odd, handle the last one
+    if (num_output_blocks % 2 != 0) {
+      size_t last_output_idx = num_output_blocks - 1;
+      merge_hash(prev_buf + (2 * last_output_idx) * 64,
+                 prev_buf + (2 * last_output_idx + 1) * 64,
+                 cur_buf + last_output_idx * 64);
     }
 
     length /= 2;
