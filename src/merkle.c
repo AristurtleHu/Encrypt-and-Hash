@@ -6,11 +6,6 @@
   _mm_or_si128(_mm_slli_epi32((x), (n)), _mm_srli_epi32((x), 32 - (n)))
 
 #define round                                                                  \
-  v_state0_3 = _mm256_castsi256_si128(v_state0_7);                             \
-  v_state4_7 = _mm256_extracti128_si256(v_state0_7, 1);                        \
-  v_state8_11 = _mm256_castsi256_si128(v_state8_15);                           \
-  v_state12_15 = _mm256_extracti128_si256(v_state8_15, 1);                     \
-                                                                               \
   v_state0_3 = _mm_add_epi32(v_state0_3, v_state4_7);                          \
   v_state0_3 = rotl32_128(v_state0_3, 7);                                      \
                                                                                \
@@ -21,10 +16,7 @@
   v_state0_3 = rotl32_128(v_state0_3, 9);                                      \
                                                                                \
   v_state4_7 = _mm_add_epi32(v_state4_7, v_state12_15);                        \
-  v_state4_7 = rotl32_128(v_state4_7, 9);                                      \
-                                                                               \
-  v_state0_7 = _mm256_set_m128i(v_state4_7, v_state0_3);                       \
-  v_state8_15 = _mm256_set_m128i(v_state12_15, v_state8_11);
+  v_state4_7 = rotl32_128(v_state4_7, 9);
 
 void merge_hash(const uint8_t block1[64], const uint8_t block2[64],
                 uint8_t output[64]) {
@@ -62,8 +54,6 @@ void merge_hash(const uint8_t block1[64], const uint8_t block2[64],
   v_state4_7 = _mm_add_epi32(v_state4_7, v_state12_15);
   v_state4_7 = rotl32_128(v_state4_7, 9);
 
-  v_state0_7 = _mm256_set_m128i(v_state4_7, v_state0_3);
-  v_state8_15 = _mm256_set_m128i(v_state12_15, v_state8_11);
   round;
   round;
   round;
@@ -74,6 +64,8 @@ void merge_hash(const uint8_t block1[64], const uint8_t block2[64],
   round;
   round;
 
+  v_state0_7 = _mm256_set_m128i(v_state4_7, v_state0_3);
+  v_state8_15 = _mm256_set_m128i(v_state12_15, v_state8_11);
   // Final summation: state[i] += state[15 - i];
   __m256i v_state8_15_rev =
       _mm256_permutevar8x32_epi32(v_state8_15, v_reverse_control);
@@ -113,13 +105,23 @@ void merkel_tree(const uint8_t *input, uint8_t *output, size_t length) {
     size_t num_output_blocks =
         length / 64; // Total number of merge_hash operations for this level
 
+    if (num_output_blocks >= 32) {
 #pragma omp parallel for
-    for (size_t i = 0; i < num_output_blocks / 2; ++i) {
-      merge_hash(prev_buf + (4 * i) * 64, prev_buf + (4 * i + 1) * 64,
-                 cur_buf + (2 * i) * 64);
+      for (size_t i = 0; i < num_output_blocks / 2; ++i) {
+        merge_hash(prev_buf + (4 * i) * 64, prev_buf + (4 * i + 1) * 64,
+                   cur_buf + (2 * i) * 64);
 
-      merge_hash(prev_buf + (4 * i + 2) * 64, prev_buf + (4 * i + 3) * 64,
-                 cur_buf + (2 * i + 1) * 64);
+        merge_hash(prev_buf + (4 * i + 2) * 64, prev_buf + (4 * i + 3) * 64,
+                   cur_buf + (2 * i + 1) * 64);
+      }
+    } else {
+      for (size_t i = 0; i < num_output_blocks / 2; ++i) {
+        merge_hash(prev_buf + (4 * i) * 64, prev_buf + (4 * i + 1) * 64,
+                   cur_buf + (2 * i) * 64);
+
+        merge_hash(prev_buf + (4 * i + 2) * 64, prev_buf + (4 * i + 3) * 64,
+                   cur_buf + (2 * i + 1) * 64);
+      }
     }
 
     // If the total number of merge operations is odd, handle the last one
