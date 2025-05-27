@@ -1,33 +1,54 @@
 #include "mercha.h"
 #include <immintrin.h>
 
-// Helper for ROTL32 on __m256i
-#define rotl32_256(x, n)                                                       \
-  _mm256_or_si256(_mm256_slli_epi32((x), (n)), _mm256_srli_epi32((x), 32 - (n)))
+// Helper for ROTL32 on __m256i using inline assembly
+static inline __m256i rotl32_256(__m256i x, int n) {
+  __m256i result;
+  __asm__ volatile("vpsrld $%c2, %1, %%ymm0\n\t"
+                   "vpslld $%c3, %1, %0\n\t"
+                   "vpor %%ymm0, %0, %0"
+                   : "=x"(result)
+                   : "x"(x), "i"(32 - n), "i"(n)
+                   : "ymm0");
+  return result;
+}
 
 #define chacha_simd(a, b, c, d)                                                \
-  (a) = _mm256_add_epi32((a), (b));                                            \
-  (d) = _mm256_xor_si256((d), (a));                                            \
-  (d) = rotl32_256((d), 16);                                                   \
-  (c) = _mm256_add_epi32((c), (d));                                            \
-  (b) = _mm256_xor_si256((b), (c));                                            \
-  (b) = rotl32_256((b), 12);                                                   \
-  (a) = _mm256_add_epi32((a), (b));                                            \
-  (d) = _mm256_xor_si256((d), (a));                                            \
-  (d) = rotl32_256((d), 8);                                                    \
-  (c) = _mm256_add_epi32((c), (d));                                            \
-  (b) = _mm256_xor_si256((b), (c));                                            \
-  (b) = rotl32_256((b), 7)
+  __asm__ volatile("vpaddd %1, %0, %0\n\t"                                     \
+                   "vpxor %0, %3, %3\n\t"                                      \
+                   "vpsrld $16, %3, %%ymm15\n\t"                               \
+                   "vpslld $16, %3, %3\n\t"                                    \
+                   "vpor %%ymm15, %3, %3\n\t"                                  \
+                   "vpaddd %3, %2, %2\n\t"                                     \
+                   "vpxor %2, %1, %1\n\t"                                      \
+                   "vpsrld $20, %1, %%ymm15\n\t"                               \
+                   "vpslld $12, %1, %1\n\t"                                    \
+                   "vpor %%ymm15, %1, %1\n\t"                                  \
+                   "vpaddd %1, %0, %0\n\t"                                     \
+                   "vpxor %0, %3, %3\n\t"                                      \
+                   "vpsrld $24, %3, %%ymm15\n\t"                               \
+                   "vpslld $8, %3, %3\n\t"                                     \
+                   "vpor %%ymm15, %3, %3\n\t"                                  \
+                   "vpaddd %3, %2, %2\n\t"                                     \
+                   "vpxor %2, %1, %1\n\t"                                      \
+                   "vpsrld $25, %1, %%ymm15\n\t"                               \
+                   "vpslld $7, %1, %1\n\t"                                     \
+                   "vpor %%ymm15, %1, %1"                                      \
+                   : "+x"(a), "+x"(b), "+x"(c), "+x"(d)                        \
+                   :                                                           \
+                   : "ymm15")
 
 #define round                                                                  \
   chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);                              \
-  v_x4_7 = _mm256_shuffle_epi32(v_x4_7, _MM_SHUFFLE(0, 3, 2, 1));              \
-  v_x8_11 = _mm256_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));            \
-  v_x12_15 = _mm256_shuffle_epi32(v_x12_15, _MM_SHUFFLE(2, 1, 0, 3));          \
+  __asm__ volatile("vpshufd $0x39, %0, %0\n\t"                                 \
+                   "vpshufd $0x4e, %1, %1\n\t"                                 \
+                   "vpshufd $0x93, %2, %2"                                     \
+                   : "+x"(v_x4_7), "+x"(v_x8_11), "+x"(v_x12_15));             \
   chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);                              \
-  v_x4_7 = _mm256_shuffle_epi32(v_x4_7, _MM_SHUFFLE(2, 1, 0, 3));              \
-  v_x8_11 = _mm256_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));            \
-  v_x12_15 = _mm256_shuffle_epi32(v_x12_15, _MM_SHUFFLE(0, 3, 2, 1));
+  __asm__ volatile("vpshufd $0x93, %0, %0\n\t"                                 \
+                   "vpshufd $0x4e, %1, %1\n\t"                                 \
+                   "vpshufd $0x39, %2, %2"                                     \
+                   : "+x"(v_x4_7), "+x"(v_x8_11), "+x"(v_x12_15));
 
 // Assumes state and out are 16-byte aligned.
 static void chacha20_block(uint32_t state[16], uint8_t out[128]) {
@@ -64,23 +85,7 @@ static void chacha20_block(uint32_t state[16], uint8_t out[128]) {
   v_x12_15 = v_s12_15;
 
   // Rounds
-  // Column round
-  chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
-
-  // Diagonal round
-  v_x4_7 = _mm256_shuffle_epi32(v_x4_7, _MM_SHUFFLE(0, 3, 2, 1));
-  v_x8_11 = _mm256_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
-  v_x12_15 = _mm256_shuffle_epi32(v_x12_15, _MM_SHUFFLE(2, 1, 0, 3));
-  chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);
-
-  // Shuffle back
-  v_x4_7 = _mm256_shuffle_epi32(v_x4_7, _MM_SHUFFLE(2, 1, 0, 3));
-  v_x8_11 = _mm256_shuffle_epi32(v_x8_11, _MM_SHUFFLE(1, 0, 3, 2));
-  v_x12_15 = _mm256_shuffle_epi32(v_x12_15, _MM_SHUFFLE(0, 3, 2, 1));
-
-  // 9 more double rounds (total 10 double rounds = 20 rounds)
-  for (int i = 0; i < 9; i += 3) {
-    round;
+  for (int i = 0; i < 10; i += 2) {
     round;
     round;
   }

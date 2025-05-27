@@ -1,22 +1,42 @@
 #include "mercha.h"
 #include <immintrin.h>
 
-// Helper for ROTL32 on __m128i 4int
-#define rotl32_128(x, n)                                                       \
-  _mm_or_si128(_mm_slli_epi32((x), (n)), _mm_srli_epi32((x), 32 - (n)))
+// Assembly round function
+static inline void asm_rounds(__m128i *state0_3, __m128i *state4_7,
+                              __m128i *state8_11, __m128i *state12_15) {
+  __asm__ volatile(
+      "vmovdqa %0, %%xmm0\n\t" // state0_3
+      "vmovdqa %1, %%xmm1\n\t" // state4_7
+      "vmovdqa %2, %%xmm2\n\t" // state8_11
+      "vmovdqa %3, %%xmm3\n\t" // state12_15
 
-#define round                                                                  \
-  v_state0_3 = _mm_add_epi32(v_state0_3, v_state4_7);                          \
-  v_state0_3 = rotl32_128(v_state0_3, 7);                                      \
-                                                                               \
-  v_state8_11 = _mm_add_epi32(v_state8_11, v_state12_15);                      \
-  v_state8_11 = rotl32_128(v_state8_11, 7);                                    \
-                                                                               \
-  v_state0_3 = _mm_add_epi32(v_state0_3, v_state8_11);                         \
-  v_state0_3 = rotl32_128(v_state0_3, 9);                                      \
-                                                                               \
-  v_state4_7 = _mm_add_epi32(v_state4_7, v_state12_15);                        \
-  v_state4_7 = rotl32_128(v_state4_7, 9);
+      ".rept 10\n\t"
+
+      // Round operations
+      "vpaddd %%xmm1, %%xmm0, %%xmm0\n\t" // state0_3 += state4_7
+      "vprold $7, %%xmm0, %%xmm0\n\t"     // rotl32(state0_3, 7)
+
+      "vpaddd %%xmm3, %%xmm2, %%xmm2\n\t" // state8_11 += state12_15
+      "vprold $7, %%xmm2, %%xmm2\n\t"     // rotl32(state8_11, 7)
+
+      "vpaddd %%xmm2, %%xmm0, %%xmm0\n\t" // state0_3 += state8_11
+      "vprold $9, %%xmm0, %%xmm0\n\t"     // rotl32(state0_3, 9)
+
+      "vpaddd %%xmm3, %%xmm1, %%xmm1\n\t" // state4_7 += state12_15
+      "vprold $9, %%xmm1, %%xmm1\n\t"     // rotl32(state4_7, 9)
+
+      ".endr\n\t"
+
+      // Store results
+      "vmovdqa %%xmm0, %0\n\t"
+      "vmovdqa %%xmm1, %1\n\t"
+      "vmovdqa %%xmm2, %2\n\t"
+      "vmovdqa %%xmm3, %3\n\t"
+
+      : "+m"(*state0_3), "+m"(*state4_7), "+m"(*state8_11), "+m"(*state12_15)
+      :
+      : "xmm0", "xmm1", "xmm2", "xmm3");
+}
 
 void merge_hash(const uint8_t block1[64], const uint8_t block2[64],
                 uint8_t output[64]) {
@@ -42,27 +62,8 @@ void merge_hash(const uint8_t block1[64], const uint8_t block2[64],
   __m128i v_state8_11 = _mm256_castsi256_si128(v_state8_15);
   __m128i v_state12_15 = _mm256_extracti128_si256(v_state8_15, 1);
 
-  v_state0_3 = _mm_add_epi32(v_state0_3, v_state4_7);
-  v_state0_3 = rotl32_128(v_state0_3, 7);
-
-  v_state8_11 = _mm_add_epi32(v_state8_11, v_state12_15);
-  v_state8_11 = rotl32_128(v_state8_11, 7);
-
-  v_state0_3 = _mm_add_epi32(v_state0_3, v_state8_11);
-  v_state0_3 = rotl32_128(v_state0_3, 9);
-
-  v_state4_7 = _mm_add_epi32(v_state4_7, v_state12_15);
-  v_state4_7 = rotl32_128(v_state4_7, 9);
-
-  round;
-  round;
-  round;
-  round;
-  round;
-  round;
-  round;
-  round;
-  round;
+  // 10 rounds
+  asm_rounds(&v_state0_3, &v_state4_7, &v_state8_11, &v_state12_15);
 
   v_state0_7 = _mm256_set_m128i(v_state4_7, v_state0_3);
   v_state8_15 = _mm256_set_m128i(v_state12_15, v_state8_11);
