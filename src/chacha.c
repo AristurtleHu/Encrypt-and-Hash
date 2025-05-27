@@ -1,18 +1,6 @@
 #include "mercha.h"
 #include <immintrin.h>
 
-// Helper for ROTL32 on __m256i using inline assembly
-static inline __m256i rotl32_256(__m256i x, int n) {
-  __m256i result;
-  __asm__ volatile("vpsrld $%c2, %1, %%ymm0\n\t"
-                   "vpslld $%c3, %1, %0\n\t"
-                   "vpor %%ymm0, %0, %0"
-                   : "=x"(result)
-                   : "x"(x), "i"(32 - n), "i"(n)
-                   : "ymm0");
-  return result;
-}
-
 #define chacha_simd(a, b, c, d)                                                \
   __asm__ volatile("vpaddd %1, %0, %0\n\t"                                     \
                    "vpxor %0, %3, %3\n\t"                                      \
