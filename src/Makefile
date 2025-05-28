@@ -1,5 +1,5 @@
 CC := gcc
-CFLAGS := -Wall -O0 -fopenmp -mavx -mavx2
+CFLAGS := -Wall -O0 -fopenmp -mavx -mavx2 -mavx512f
 
 SRCS := $(wildcard *.c)
 OBJS := $(SRCS:%.c=%.o)

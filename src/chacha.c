@@ -3,69 +3,86 @@
 
 #define chacha_simd(a, b, c, d)                                                \
   __asm__ volatile("vpaddd %1, %0, %0\n\t"                                     \
-                   "vpxor %0, %3, %3\n\t"                                      \
-                   "vpsrld $16, %3, %%ymm15\n\t"                               \
-                   "vpslld $16, %3, %3\n\t"                                    \
-                   "vpor %%ymm15, %3, %3\n\t"                                  \
+                   "vpxord %0, %3, %3\n\t"                                     \
+                   "vprord $16, %3, %3\n\t"                                    \
                    "vpaddd %3, %2, %2\n\t"                                     \
-                   "vpxor %2, %1, %1\n\t"                                      \
-                   "vpsrld $20, %1, %%ymm15\n\t"                               \
-                   "vpslld $12, %1, %1\n\t"                                    \
-                   "vpor %%ymm15, %1, %1\n\t"                                  \
+                   "vpxord %2, %1, %1\n\t"                                     \
+                   "vprord $20, %1, %1\n\t"                                    \
                    "vpaddd %1, %0, %0\n\t"                                     \
-                   "vpxor %0, %3, %3\n\t"                                      \
-                   "vpsrld $24, %3, %%ymm15\n\t"                               \
-                   "vpslld $8, %3, %3\n\t"                                     \
-                   "vpor %%ymm15, %3, %3\n\t"                                  \
+                   "vpxord %0, %3, %3\n\t"                                     \
+                   "vprord $24, %3, %3\n\t"                                    \
                    "vpaddd %3, %2, %2\n\t"                                     \
-                   "vpxor %2, %1, %1\n\t"                                      \
-                   "vpsrld $25, %1, %%ymm15\n\t"                               \
-                   "vpslld $7, %1, %1\n\t"                                     \
-                   "vpor %%ymm15, %1, %1"                                      \
-                   : "+x"(a), "+x"(b), "+x"(c), "+x"(d)                        \
+                   "vpxord %2, %1, %1\n\t"                                     \
+                   "vprord $25, %1, %1"                                        \
+                   : "+v"(a), "+v"(b), "+v"(c), "+v"(d)                        \
                    :                                                           \
-                   : "ymm15")
+                   :)
 
 #define round                                                                  \
   chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);                              \
   __asm__ volatile("vpshufd $0x39, %0, %0\n\t"                                 \
                    "vpshufd $0x4e, %1, %1\n\t"                                 \
                    "vpshufd $0x93, %2, %2"                                     \
-                   : "+x"(v_x4_7), "+x"(v_x8_11), "+x"(v_x12_15));             \
+                   : "+v"(v_x4_7), "+v"(v_x8_11), "+v"(v_x12_15));             \
   chacha_simd(v_x0_3, v_x4_7, v_x8_11, v_x12_15);                              \
   __asm__ volatile("vpshufd $0x93, %0, %0\n\t"                                 \
                    "vpshufd $0x4e, %1, %1\n\t"                                 \
                    "vpshufd $0x39, %2, %2"                                     \
-                   : "+x"(v_x4_7), "+x"(v_x8_11), "+x"(v_x12_15));
+                   : "+v"(v_x4_7), "+v"(v_x8_11), "+v"(v_x12_15));
 
-// Assumes state and out are 16-byte aligned.
-static void chacha20_block(uint32_t state[16], uint8_t out[128]) {
+// Assumes state and out are 16-byte aligned. Generates 4 blocks
+static void chacha20_block(uint32_t state[16], uint8_t out[256]) {
 
-  __m256i v_s0_3, v_s4_7, v_s8_11, v_s12_15;
-  __m256i v_x0_3, v_x4_7, v_x8_11, v_x12_15;
-
-  // Ensure current_state1 and current_state2 are 16-byte aligned for
-  // _mm_load_si128
+  // Ensure current states are 16-byte aligned
   uint32_t current_state1[16] __attribute__((aligned(16)));
   uint32_t current_state2[16] __attribute__((aligned(16)));
+  uint32_t current_state3[16] __attribute__((aligned(16)));
+  uint32_t current_state4[16] __attribute__((aligned(16)));
 
   memcpy(current_state1, state, 16 * sizeof(uint32_t));
   memcpy(current_state2, state, 16 * sizeof(uint32_t));
-  current_state2[12] += 1;
+  memcpy(current_state3, state, 16 * sizeof(uint32_t));
+  memcpy(current_state4, state, 16 * sizeof(uint32_t));
 
-  // low 128-bits for current_state1, high 128-bits for current_state2
+  current_state2[12] += 1;
+  current_state3[12] += 2;
+  current_state4[12] += 3;
+
+  __m512i v_s0_3, v_s4_7, v_s8_11, v_s12_15;
+  __m512i v_x0_3, v_x4_7, v_x8_11, v_x12_15;
+
+  // Load states
   v_s0_3 =
-      _mm256_set_m128i(_mm_load_si128((const __m128i *)&current_state2[0]),
-                       _mm_load_si128((const __m128i *)&current_state1[0]));
+      _mm512_set_epi32(current_state4[3], current_state4[2], current_state4[1],
+                       current_state4[0], current_state3[3], current_state3[2],
+                       current_state3[1], current_state3[0], current_state2[3],
+                       current_state2[2], current_state2[1], current_state2[0],
+                       current_state1[3], current_state1[2], current_state1[1],
+                       current_state1[0]);
+
   v_s4_7 =
-      _mm256_set_m128i(_mm_load_si128((const __m128i *)&current_state2[4]),
-                       _mm_load_si128((const __m128i *)&current_state1[4]));
-  v_s8_11 =
-      _mm256_set_m128i(_mm_load_si128((const __m128i *)&current_state2[8]),
-                       _mm_load_si128((const __m128i *)&current_state1[8]));
-  v_s12_15 =
-      _mm256_set_m128i(_mm_load_si128((const __m128i *)&current_state2[12]),
-                       _mm_load_si128((const __m128i *)&current_state1[12]));
+      _mm512_set_epi32(current_state4[7], current_state4[6], current_state4[5],
+                       current_state4[4], current_state3[7], current_state3[6],
+                       current_state3[5], current_state3[4], current_state2[7],
+                       current_state2[6], current_state2[5], current_state2[4],
+                       current_state1[7], current_state1[6], current_state1[5],
+                       current_state1[4]);
+
+  v_s8_11 = _mm512_set_epi32(
+      current_state4[11], current_state4[10], current_state4[9],
+      current_state4[8], current_state3[11], current_state3[10],
+      current_state3[9], current_state3[8], current_state2[11],
+      current_state2[10], current_state2[9], current_state2[8],
+      current_state1[11], current_state1[10], current_state1[9],
+      current_state1[8]);
+
+  v_s12_15 = _mm512_set_epi32(
+      current_state4[15], current_state4[14], current_state4[13],
+      current_state4[12], current_state3[15], current_state3[14],
+      current_state3[13], current_state3[12], current_state2[15],
+      current_state2[14], current_state2[13], current_state2[12],
+      current_state1[15], current_state1[14], current_state1[13],
+      current_state1[12]);
 
   v_x0_3 = v_s0_3;
   v_x4_7 = v_s4_7;
@@ -79,27 +96,41 @@ static void chacha20_block(uint32_t state[16], uint8_t out[128]) {
   }
 
   // Add initial state
-  v_x0_3 = _mm256_add_epi32(v_x0_3, v_s0_3);
-  v_x4_7 = _mm256_add_epi32(v_x4_7, v_s4_7);
-  v_x8_11 = _mm256_add_epi32(v_x8_11, v_s8_11);
-  v_x12_15 = _mm256_add_epi32(v_x12_15, v_s12_15);
+  v_x0_3 = _mm512_add_epi32(v_x0_3, v_s0_3);
+  v_x4_7 = _mm512_add_epi32(v_x4_7, v_s4_7);
+  v_x8_11 = _mm512_add_epi32(v_x8_11, v_s8_11);
+  v_x12_15 = _mm512_add_epi32(v_x12_15, v_s12_15);
 
-  // Store results: block0 keystream, then block1 keystream
-  // Assumes out is 16-byte aligned. Offsets are multiples of 16.
-  _mm_store_si128((__m128i *)(out + 0), _mm256_castsi256_si128(v_x0_3));
-  _mm_store_si128((__m128i *)(out + 64), _mm256_extracti128_si256(v_x0_3, 1));
+  // Store results for all 4 blocks
+  _mm_store_si128((__m128i *)(out + 0), _mm512_extracti32x4_epi32(v_x0_3, 0));
+  _mm_store_si128((__m128i *)(out + 64), _mm512_extracti32x4_epi32(v_x0_3, 1));
+  _mm_store_si128((__m128i *)(out + 128), _mm512_extracti32x4_epi32(v_x0_3, 2));
+  _mm_store_si128((__m128i *)(out + 192), _mm512_extracti32x4_epi32(v_x0_3, 3));
 
-  _mm_store_si128((__m128i *)(out + 16), _mm256_castsi256_si128(v_x4_7));
+  _mm_store_si128((__m128i *)(out + 16), _mm512_extracti32x4_epi32(v_x4_7, 0));
   _mm_store_si128((__m128i *)(out + 64 + 16),
-                  _mm256_extracti128_si256(v_x4_7, 1));
+                  _mm512_extracti32x4_epi32(v_x4_7, 1));
+  _mm_store_si128((__m128i *)(out + 128 + 16),
+                  _mm512_extracti32x4_epi32(v_x4_7, 2));
+  _mm_store_si128((__m128i *)(out + 192 + 16),
+                  _mm512_extracti32x4_epi32(v_x4_7, 3));
 
-  _mm_store_si128((__m128i *)(out + 32), _mm256_castsi256_si128(v_x8_11));
+  _mm_store_si128((__m128i *)(out + 32), _mm512_extracti32x4_epi32(v_x8_11, 0));
   _mm_store_si128((__m128i *)(out + 64 + 32),
-                  _mm256_extracti128_si256(v_x8_11, 1));
+                  _mm512_extracti32x4_epi32(v_x8_11, 1));
+  _mm_store_si128((__m128i *)(out + 128 + 32),
+                  _mm512_extracti32x4_epi32(v_x8_11, 2));
+  _mm_store_si128((__m128i *)(out + 192 + 32),
+                  _mm512_extracti32x4_epi32(v_x8_11, 3));
 
-  _mm_store_si128((__m128i *)(out + 48), _mm256_castsi256_si128(v_x12_15));
+  _mm_store_si128((__m128i *)(out + 48),
+                  _mm512_extracti32x4_epi32(v_x12_15, 0));
   _mm_store_si128((__m128i *)(out + 64 + 48),
-                  _mm256_extracti128_si256(v_x12_15, 1));
+                  _mm512_extracti32x4_epi32(v_x12_15, 1));
+  _mm_store_si128((__m128i *)(out + 128 + 48),
+                  _mm512_extracti32x4_epi32(v_x12_15, 2));
+  _mm_store_si128((__m128i *)(out + 192 + 48),
+                  _mm512_extracti32x4_epi32(v_x12_15, 3));
 }
 
 // Helper function to XOR buffer with keystream
@@ -137,33 +168,27 @@ void chacha20_encrypt(const uint8_t key[32], const uint8_t nonce[12],
   size_t num_blocks = (length + 63) / 64; // Total 64-byte ChaCha blocks needed
 
 #pragma omp parallel for
-  for (size_t pair_idx = 0; pair_idx < (num_blocks + 1) / 2; ++pair_idx) {
-    size_t block_idx = pair_idx * 2;
+  for (size_t quad_idx = 0; quad_idx < (num_blocks + 3) / 4; ++quad_idx) {
+    size_t block_idx = quad_idx * 4;
 
-    uint8_t key_stream_pair[128] __attribute__((aligned(16)));
+    uint8_t key_stream[256] __attribute__((aligned(16)));
     uint32_t local_state[16] __attribute__((aligned(16)));
 
     memcpy(local_state, state, sizeof(state));
     local_state[12] += (uint32_t)block_idx;
 
-    chacha20_block(local_state, key_stream_pair);
+    chacha20_block(local_state, key_stream);
 
-    // XOR for the first block in the pair
-    size_t offset0 = block_idx * 64;
-    if (offset0 < length) {
-      size_t remaining = length - offset0;
-      size_t bytes_to_xor = (remaining < 64) ? remaining : 64;
-      xor_buffer_simd(buffer + offset0, key_stream_pair, bytes_to_xor);
-    }
-
-    // XOR for the second block in the pair
-    size_t block_idx_for_second = block_idx + 1;
-    if (block_idx_for_second < num_blocks) {
-      size_t offset1 = block_idx_for_second * 64;
-      if (offset1 < length) {
-        size_t remaining = length - offset1;
-        size_t bytes_to_xor = (remaining < 64) ? remaining : 64;
-        xor_buffer_simd(buffer + offset1, key_stream_pair + 64, bytes_to_xor);
+    // XOR for all four blocks in the quad
+    for (int i = 0; i < 4; ++i) {
+      size_t current_block_idx = block_idx + i;
+      if (current_block_idx < num_blocks) {
+        size_t offset = current_block_idx * 64;
+        if (offset < length) {
+          size_t remaining = length - offset;
+          size_t bytes_to_xor = (remaining < 64) ? remaining : 64;
+          xor_buffer_simd(buffer + offset, key_stream + (i * 64), bytes_to_xor);
+        }
       }
     }
   }
